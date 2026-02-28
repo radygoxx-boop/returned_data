@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="返却管理">
+  <meta name="theme-color" content="#0A0F1E">
+  <title>返却管理</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- html5-qrcode -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0A0F1E;
+      --bg2:         #0F1629;
+      --bg3:         #151D35;
+      --surface:     #1A2340;
+      --surface2:    #1F2B4A;
+      --border:      rgba(255,255,255,0.08);
+      --border2:     rgba(255,255,255,0.14);
+
+      --ship:        #2563EB;
+      --ship-light:  #3B82F6;
+      --ship-glow:   rgba(37,99,235,0.35);
+      --ship-bg:     rgba(37,99,235,0.12);
+
+      --ret:         #059669;
+      --ret-light:   #10B981;
+      --ret-glow:    rgba(5,150,105,0.35);
+      --ret-bg:      rgba(5,150,105,0.12);
+
+      --danger:      #DC2626;
+      --danger-light:#EF4444;
+      --warn:        #D97706;
+      --warn-light:  #F59E0B;
+
+      --text:        #F1F5F9;
+      --text2:       #94A3B8;
+      --text3:       #64748B;
+
+      --radius:      16px;
+      --radius-sm:   10px;
+      --safe-top:    env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* ===== LAYOUT ===== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      height: 100dvh;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      flex-shrink: 0;
+      padding: calc(var(--safe-top) + 14px) 20px 14px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(20px);
+      position: relative;
+      z-index: 10;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--ship), var(--ret));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .app-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .worker-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      color: var(--text2);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .worker-btn .avatar {
+      width: 20px; height: 20px;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: white; font-weight: 600;
+    }
+
+    /* ===== OFFLINE BANNER ===== */
+    .offline-banner {
+      flex-shrink: 0;
+      background: var(--warn);
+      color: white;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .offline-banner.show { display: block; }
+
+    /* ===== MAIN SCROLL AREA ===== */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px 16px calc(var(--safe-bottom) + 16px);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ===== MODE SELECTOR ===== */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .mode-btn {
+      position: relative;
+      padding: 20px 12px;
+      border: 2px solid transparent;
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .mode-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .mode-btn.ship::before  { background: var(--ship-bg); }
+    .mode-btn.ret::before   { background: var(--ret-bg); }
+    .mode-btn.active.ship   { border-color: var(--ship); box-shadow: 0 0 0 1px var(--ship), 0 0 20px var(--ship-glow); }
+    .mode-btn.active.ret    { border-color: var(--ret);  box-shadow: 0 0 0 1px var(--ret),  0 0 20px var(--ret-glow); }
+    .mode-btn.active::before { opacity: 1; }
+    .mode-btn:active        { transform: scale(0.96); }
+
+    .mode-icon {
+      font-size: 32px;
+      line-height: 1;
+      position: relative;
+      z-index: 1;
+      filter: grayscale(0.4);
+      transition: filter 0.2s;
+    }
+    .mode-btn.active .mode-icon { filter: none; }
+    .mode-label {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      position: relative;
+      z-index: 1;
+      color: var(--text2);
+      transition: color 0.2s;
+    }
+    .mode-btn.active.ship .mode-label { color: var(--ship-light); }
+    .mode-btn.active.ret  .mode-label { color: var(--ret-light); }
+    .mode-badge {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.2s;
+      z-index: 2;
+    }
+    .mode-btn.active.ship .mode-badge { background: var(--ship); color: white; opacity: 1; transform: scale(1); }
+    .mode-btn.active.ret  .mode-badge { background: var(--ret);  color: white; opacity: 1; transform: scale(1); }
+
+    /* ===== CARD ===== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text3);
+    }
+    .card-badge {
+      min-width: 24px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--ship);
+      color: white;
+      transition: background 0.3s;
+    }
+    .card-badge.ret { background: var(--ret); }
+
+    /* ===== SLIP CAPTURE ===== */
+    .slip-area {
+      padding: 14px 16px;
+    }
+    .slip-trigger {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--bg3);
+      border: 1.5px dashed var(--border2);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .slip-trigger.captured {
+      border-style: solid;
+      border-color: var(--ship);
+      background: var(--ship-bg);
+    }
+    .slip-trigger.captured.ret-mode {
+      border-color: var(--ret);
+      background: var(--ret-bg);
+    }
+    .slip-cam-icon {
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+    .slip-info { flex: 1; min-width: 0; }
+    .slip-label {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text2);
+    }
+    .slip-tracking {
+      font-size: 13px;
+      font-family: 'SF Mono', 'Courier New', monospace;
+      color: var(--ship-light);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .slip-tracking.ret-mode { color: var(--ret-light); }
+    .slip-thumb {
+      width: 52px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: none;
+      border: 1.5px solid var(--border2);
+    }
+
+    /* ===== QR SCANNER ===== */
+    .scanner-wrap {
+      padding: 14px 16px 0;
+    }
+    #qr-reader {
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: #000;
+    }
+    #qr-reader video { width: 100% !important; }
+    /* QRライブラリのデフォルトUIを非表示 */
+    #qr-reader__scan_region img { display: none !important; }
+    #qr-reader__dashboard { display: none !important; }
+    .scan-hint {
+      padding: 8px 16px 14px;
+      font-size: 12px;
+      color: var(--text3);
+      text-align: center;
+    }
+
+    /* ===== SCANNED LIST ===== */
+    .scanned-list {
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .scanned-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      gap: 10px;
+      border-top: 1px solid var(--border);
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .scanned-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--ship);
+    }
+    .scanned-dot.ret { background: var(--ret); }
+    .scanned-id {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'SF Mono', 'Courier New', monospace;
+      letter-spacing: 0.3px;
+    }
+    .scanned-remove {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(239,68,68,0.12);
+      border: none;
+      color: var(--danger-light);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .scanned-empty {
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--text3);
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ===== NOTES ===== */
+    .notes-wrap {
+      padding: 0 16px 14px;
+    }
+    .notes-field {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--bg3);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .notes-field:focus { border-color: var(--ret); }
+    .notes-field::placeholder { color: var(--text3); }
+
+    /* ===== SUBMIT ===== */
+    .submit-wrap {
+      padding: 0 16px 6px;
+    }
+    .submit-btn {
+      width: 100%;
+      padding: 18px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .submit-btn.ship-mode {
+      background: linear-gradient(135deg, var(--ship), #1D4ED8);
+      color: white;
+      box-shadow: 0 4px 20px var(--ship-glow);
+    }
+    .submit-btn.ret-mode {
+      background: linear-gradient(135deg, var(--ret), #047857);
+      color: white;
+      box-shadow: 0 4px 20px var(--ret-glow);
+    }
+    .submit-btn:disabled {
+      background: var(--surface2);
+      color: var(--text3);
+      box-shadow: none;
+    }
+    .submit-btn:not(:disabled):active { transform: scale(0.97); }
+    .submit-btn .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .submit-btn.loading .btn-text { display: none; }
+    .submit-btn.loading .spinner  { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== PENDING BADGE ===== */
+    .pending-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px;
+      font-size: 12px;
+      color: var(--warn-light);
+      cursor: pointer;
+    }
+    .pending-wrap.hidden { display: none; }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed;
+      bottom: calc(var(--safe-bottom) + 20px);
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 12px 20px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success { background: rgba(5,150,105,0.9); border-color: var(--ret); }
+    .toast.error   { background: rgba(220,38,38,0.9); border-color: var(--danger); }
+    .toast.warn    { background: rgba(217,119,6,0.9); border-color: var(--warn); }
+
+    /* ===== MODAL (worker setup) ===== */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(10px);
+      z-index: 200;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: var(--safe-bottom);
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 24px 24px 0 0;
+      padding: 32px 24px 28px;
+      width: 100%;
+      max-width: 480px;
+      animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    .modal-handle {
+      width: 40px; height: 4px;
+      background: var(--border2);
+      border-radius: 2px;
+      margin: 0 auto 24px;
+    }
+    .modal-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .modal-sub {
+      font-size: 14px;
+      color: var(--text2);
+      margin-bottom: 24px;
+    }
+    .modal-input {
+      width: 100%;
+      padding: 16px 18px;
+      background: var(--bg3);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 17px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 14px;
+      transition: border-color 0.2s;
+    }
+    .modal-input:focus { border-color: var(--ship); }
+    .modal-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--ship), #1D4ED8);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    .scanned-list::-webkit-scrollbar { width: 3px; }
+    .scanned-list::-webkit-scrollbar-track { background: transparent; }
+    .scanned-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ===== WORKER SETUP MODAL ===== -->
+<div class="modal-overlay" id="workerModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📦 返却管理</div>
+    <div class="modal-sub">作業を始める前に、あなたの名前を入力してください。</div>
+    <input class="modal-input" id="workerInput" type="text"
+      placeholder="例：田中" autocomplete="off"
+      inputmode="text" enterkeyhint="done">
+    <button class="modal-btn" onclick="setWorker()">開始する</button>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">📦</div>
+      <span class="app-title">返却管理</span>
+    </div>
+    <button class="worker-btn" onclick="showWorkerModal()">
+      <div class="avatar" id="avatarInitial">?</div>
+      <span id="workerLabel">未設定</span>
+    </button>
+  </div>
+
+  <!-- Offline Banner -->
+  <div class="offline-banner" id="offlineBanner">
+    📡 オフライン中 — データは自動で保存されます
+  </div>
+
+  <!-- Main Scroll -->
+  <div class="main">
+
+    <!-- ① モード選択 -->
+    <div class="mode-grid">
+      <button class="mode-btn ship active" onclick="setMode('ship')" id="btnShip">
+        <span class="mode-badge" id="shipBadge">✓</span>
+        <span class="mode-icon">📦</span>
+        <span class="mode-label">出荷</span>
+      </button>
+      <button class="mode-btn ret" onclick="setMode('ret')" id="btnRet">
+        <span class="mode-badge" id="retBadge">✓</span>
+        <span class="mode-icon">↩️</span>
+        <span class="mode-label">返却</span>
+      </button>
+    </div>
+
+    <!-- ② 伝票撮影 -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">① 伝票を撮影</span>
+        <span style="font-size:12px; color:var(--text3);">追跡番号を自動取得</span>
+      </div>
+      <div class="slip-area">
+        <input type="file" id="slipInput" accept="image/*" capture="environment"
+          style="display:none" onchange="onSlipCapture(event)">
+        <div class="slip-trigger" id="slipTrigger" onclick="document.getElementById('slipInput').click()">
+          <span class="slip-cam-icon">📷</span>
+          <div class="slip-info">
+            <div class="slip-label" id="slipLabel">タップして撮影</div>
+            <div class="slip-tracking" id="trackingDisplay"></div>
+          </div>
+          <img id="slipThumb" class="slip-thumb" alt="">
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ QRスキャン -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">② 機体QRをスキャン</span>
+        <span class="card-badge" id="countBadge">0</span>
+      </div>
+      <div class="scanner-wrap">
+        <div id="qr-reader"></div>
+      </div>
+      <div class="scan-hint">QRコードをカメラに向けると自動で読み取ります</div>
+      <div class="scanned-list" id="scannedList">
+        <div class="scanned-empty" id="emptyHint">スキャン待ち...</div>
+      </div>
+    </div>
+
+    <!-- ④ 備考（返却時のみ表示） -->
+    <div class="card" id="notesCard" style="display:none;">
+      <div class="card-header">
+        <span class="card-title">③ 備考（任意）</span>
+      </div>
+      <div class="notes-wrap">
+        <textarea class="notes-field" id="notesField"
+          rows="2" placeholder="例：外装に傷あり、電源不良など"></textarea>
+      </div>
+    </div>
+
+    <!-- ⑤ 送信 -->
+    <div class="submit-wrap">
+      <button class="submit-btn ship-mode" id="submitBtn" onclick="submitData()" disabled>
+        <span class="btn-text">📤 送信する</span>
+        <div class="spinner"></div>
+      </button>
+    </div>
+
+    <!-- オフライン保留バッジ -->
+    <div class="pending-wrap hidden" id="pendingWrap" onclick="syncPendingRecords()">
+      <span>⏳</span>
+      <span id="pendingLabel">未送信データあり — タップして再送信</span>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ============================================================
+// 設定
+// ============================================================
+const GAS_URL    = 'YOUR_GAS_WEB_APP_URL';   // ← GASデプロイ後に設定
+const API_TOKEN  = 'YOUR_SECRET_TOKEN';       // ← スクリプトプロパティと同じ値
+const OFFLINE_KEY = 'pendingRecords_v1';
+
+// ============================================================
+// 状態管理
+// ============================================================
+let currentMode    = 'ship';
+let scannedItems   = [];
+let slipBase64     = null;
+let workerName     = localStorage.getItem('workerName') || '';
+let qrScanner      = null;
+let scannerRunning = false;
+let toastTimer     = null;
+
+// ============================================================
+// 初期化
+// ============================================================
+window.addEventListener('load', () => {
+  if (workerName) {
+    applyWorker();
+  } else {
+    document.getElementById('workerModal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('workerInput').focus(), 400);
+  }
+
+  initQRScanner();
+  updatePendingBadge();
+
+  window.addEventListener('online',  onOnline);
+  window.addEventListener('offline', onOffline);
+  if (!navigator.onLine) onOffline();
+});
+
+// ============================================================
+// 作業者
+// ============================================================
+function setWorker() {
+  const name = document.getElementById('workerInput').value.trim();
+  if (!name) { showToast('名前を入力してください', 'warn'); return; }
+  workerName = name;
+  localStorage.setItem('workerName', name);
+  document.getElementById('workerModal').classList.add('hidden');
+  applyWorker();
+  showToast(`こんにちは、${name}さん！`, 'success');
+}
+
+function applyWorker() {
+  const initial = workerName.charAt(0);
+  document.getElementById('avatarInitial').textContent = initial;
+  document.getElementById('workerLabel').textContent   = workerName;
+}
+
+function showWorkerModal() {
+  document.getElementById('workerInput').value = workerName;
+  document.getElementById('workerModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('workerInput').focus(), 100);
+}
+
+document.getElementById('workerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') setWorker();
+});
+
+// ============================================================
+// モード切替
+// ============================================================
+function setMode(mode) {
+  currentMode = mode;
+
+  document.getElementById('btnShip').classList.toggle('active', mode === 'ship');
+  document.getElementById('btnRet').classList.toggle('active',  mode === 'ret');
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.classList.toggle('ship-mode', mode === 'ship');
+  submitBtn.classList.toggle('ret-mode',  mode === 'ret');
+
+  const badge = document.getElementById('countBadge');
+  badge.classList.toggle('ret', mode === 'ret');
+
+  document.getElementById('notesCard').style.display = mode === 'ret' ? '' : 'none';
+
+  // 伝票トリガーのスタイル更新
+  updateSlipTriggerStyle();
+  updateTrackingStyle();
+
+  resetScan();
+}
+
+// ============================================================
+// QRスキャナー
+// ============================================================
+function initQRScanner() {
+  qrScanner = new Html5Qrcode('qr-reader');
+  startScanner();
+}
+
+function startScanner() {
+  if (scannerRunning) return;
+  qrScanner.start(
+    { facingMode: 'environment' },
+    { fps: 12, qrbox: { width: 280, height: 140 }, aspectRatio: 2.0 },
+    onQRScanned,
+    () => {}
+  ).then(() => {
+    scannerRunning = true;
+  }).catch(err => {
+    console.warn('スキャナー起動エラー:', err);
+  });
+}
+
+function onQRScanned(decodedText) {
+  const id = decodedText.trim();
+  if (!id) return;
+
+  if (scannedItems.includes(id)) {
+    showToast('⚠️ 既にスキャン済み', 'warn');
+    return;
+  }
+
+  scannedItems.push(id);
+  if (navigator.vibrate) navigator.vibrate([30, 10, 30]);
+
+  renderScannedList();
+  updateSubmitBtn();
+}
+
+function removeItem(id) {
+  scannedItems = scannedItems.filter(i => i !== id);
+  renderScannedList();
+  updateSubmitBtn();
+}
+
+function renderScannedList() {
+  const list  = document.getElementById('scannedList');
+  const empty = document.getElementById('emptyHint');
+  const badge = document.getElementById('countBadge');
+
+  badge.textContent = scannedItems.length;
+
+  if (scannedItems.length === 0) {
+    list.innerHTML = '<div class="scanned-empty" id="emptyHint">スキャン待ち...</div>';
+    return;
+  }
+
+  const dotClass = currentMode === 'ret' ? 'scanned-dot ret' : 'scanned-dot';
+  list.innerHTML = scannedItems.map(id => `
+    <div class="scanned-item">
+      <span class="${dotClass}"></span>
+      <span class="scanned-id">${escHtml(id)}</span>
+      <button class="scanned-remove" onclick="removeItem('${escHtml(id)}')" aria-label="削除">✕</button>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// 伝票撮影
+// ============================================================
+function onSlipCapture(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // リサイズして Base64 化（Vision API は大きすぎると遅い）
+  resizeAndEncode(file, 1600).then(base64 => {
+    slipBase64 = base64;
+
+    const thumb = document.getElementById('slipThumb');
+    thumb.src   = 'data:image/jpeg;base64,' + base64;
+    thumb.style.display = 'block';
+
+    document.getElementById('slipLabel').textContent = '伝票撮影済み ✓';
+    updateSlipTriggerStyle();
+    document.getElementById('trackingDisplay').textContent = 'OCR処理中...';
+    document.getElementById('trackingDisplay').className = 'slip-tracking';
+
+    updateSubmitBtn();
+  });
+
+  // inputをリセットして同じファイルも再撮影できるように
+  event.target.value = '';
+}
+
+function resizeAndEncode(file, maxWidth) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ratio  = Math.min(1, maxWidth / img.width);
+      canvas.width  = img.width  * ratio;
+      canvas.height = img.height * ratio;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.src = url;
+  });
+}
+
+function updateSlipTriggerStyle() {
+  const trigger = document.getElementById('slipTrigger');
+  trigger.className = 'slip-trigger' +
+    (slipBase64 ? ' captured' + (currentMode === 'ret' ? ' ret-mode' : '') : '');
+}
+
+function updateTrackingStyle() {
+  const el = document.getElementById('trackingDisplay');
+  el.className = 'slip-tracking' + (currentMode === 'ret' ? ' ret-mode' : '');
+}
+
+// ============================================================
+// 送信
+// ============================================================
+function updateSubmitBtn() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = scannedItems.length === 0;
+}
+
+async function submitData() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+
+  const payload = {
+    token:         API_TOKEN,
+    operationType: currentMode === 'ship' ? '出荷' : '返却',
+    workerName,
+    itemIds:       [...scannedItems],
+    imageBase64:   slipBase64,
+    notes:         document.getElementById('notesField').value.trim(),
+    timestamp:     new Date().toISOString(),
+  };
+
+  if (!navigator.onLine) {
+    savePending(payload);
+    showToast(`📥 ${scannedItems.length}件 オフライン保存`, 'warn');
+    resetForm();
+    btn.classList.remove('loading');
+    updateSubmitBtn();
+    return;
+  }
+
+  try {
+    const res    = await fetch(GAS_URL, {
+      method: 'POST',
+      body:   JSON.stringify(payload),
+    });
+    const result = await res.json();
+
+    if (result.success) {
+      // OCR追跡番号を画面に表示
+      if (result.trackingNumber) {
+        document.getElementById('trackingDisplay').textContent = result.trackingNumber;
+        updateTrackingStyle();
+      }
+      const label = currentMode === 'ship' ? '出荷' : '返却';
+      const track = result.trackingNumber ? `  ${result.trackingNumber}` : '';
+      showToast(`✅ ${label} ${result.recordCount}件 送信完了${track}`, 'success');
+      resetForm();
+    } else {
+      throw new Error(result.error || '不明なエラー');
+    }
+  } catch (err) {
+    console.error('送信エラー:', err);
+    savePending(payload);
+    showToast('⚠️ 送信失敗 — オフライン保存しました', 'error');
+  }
+
+  btn.classList.remove('loading');
+  updateSubmitBtn();
+}
+
+// ============================================================
+// フォームリセット
+// ============================================================
+function resetForm() {
+  scannedItems = [];
+  slipBase64   = null;
+
+  document.getElementById('slipThumb').style.display = 'none';
+  document.getElementById('slipLabel').textContent    = 'タップして撮影';
+  document.getElementById('trackingDisplay').textContent = '';
+  document.getElementById('notesField').value         = '';
+  document.getElementById('slipInput').value          = '';
+  document.getElementById('countBadge').textContent   = '0';
+  document.getElementById('scannedList').innerHTML    =
+    '<div class="scanned-empty" id="emptyHint">スキャン待ち...</div>';
+
+  updateSlipTriggerStyle();
+  updateSubmitBtn();
+}
+
+function resetScan() {
+  scannedItems = [];
+  document.getElementById('countBadge').textContent = '0';
+  document.getElementById('scannedList').innerHTML  =
+    '<div class="scanned-empty" id="emptyHint">スキャン待ち...</div>';
+  updateSubmitBtn();
+}
+
+// ============================================================
+// オフライン対応
+// ============================================================
+function savePending(payload) {
+  const list = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+  list.push(payload);
+  localStorage.setItem(OFFLINE_KEY, JSON.stringify(list));
+  updatePendingBadge();
+}
+
+function updatePendingBadge() {
+  const list  = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+  const wrap  = document.getElementById('pendingWrap');
+  const label = document.getElementById('pendingLabel');
+  if (list.length > 0) {
+    wrap.classList.remove('hidden');
+    label.textContent = `未送信 ${list.length}件 — タップして再送信`;
+  } else {
+    wrap.classList.add('hidden');
+  }
+}
+
+async function syncPendingRecords() {
+  const list = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+  if (!list.length) return;
+
+  showToast(`📡 ${list.length}件を送信中...`);
+  const failed = [];
+
+  for (const payload of list) {
+    try {
+      const res    = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+      const result = await res.json();
+      if (!result.success) failed.push(payload);
+    } catch {
+      failed.push(payload);
+    }
+  }
+
+  localStorage.setItem(OFFLINE_KEY, JSON.stringify(failed));
+  updatePendingBadge();
+
+  if (failed.length === 0) {
+    showToast('✅ 全件送信完了！', 'success');
+  } else {
+    showToast(`⚠️ ${failed.length}件の送信に失敗`, 'error');
+  }
+}
+
+function onOnline() {
+  document.getElementById('offlineBanner').classList.remove('show');
+  syncPendingRecords();
+}
+function onOffline() {
+  document.getElementById('offlineBanner').classList.add('show');
+}
+
+// ============================================================
+// Toast
+// ============================================================
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  el.textContent = msg;
+  el.className   = 'toast' + (type ? ' ' + type : '');
+  // 次フレームで show を追加してトランジションを発火
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => el.classList.add('show'));
+  });
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>
